@@ -13,7 +13,7 @@ SGFdownloader -p 64817 126739 2172 -r 1 50 --path "/home/maskedball/9x9SGF"
 
 ```shell
 Description:
-  Uploader of sgf files from the OGS server
+  Downloader of sgf files from the OGS server
 
 Usage:
   SGFdownloader [options]
