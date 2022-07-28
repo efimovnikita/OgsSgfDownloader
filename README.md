@@ -3,7 +3,7 @@
 Right now, this tool only download 9x9 sgf's.
 
 ### Hot to use it
-Extract files from release archive, open folder in terminal and type:
+Extract files from [release](https://github.com/efimovnikita/OgsSgfDownloader/releases) archive, open folder in terminal and type:
 
 ```shell
 SGFdownloader -p 64817 126739 2172 -r 1 50 --path "/home/maskedball/9x9SGF"
