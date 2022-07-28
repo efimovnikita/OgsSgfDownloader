@@ -22,7 +22,7 @@ namespace OgsSgfDownloader
         {
             (Option<List<string>> playersOption, Option<List<int>> rangeOption, Option<string> pathOption) = MakeOptions();
 
-            RootCommand rootCommand = new("Uploader of sgf files from the OGS server");
+            RootCommand rootCommand = new("Downloader of sgf files from the OGS server");
             rootCommand.AddOption(playersOption);
             rootCommand.AddOption(rangeOption);
             rootCommand.AddOption(pathOption);
