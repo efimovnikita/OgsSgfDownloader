@@ -5,7 +5,7 @@ use serde::{Serialize, Deserialize};
 use requestty::{Question, Answer};
 use std::{fs};
 use std::path::{PathBuf};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use itertools::Itertools;
 use std::time::Duration;
 use async_std::task;
@@ -45,7 +45,7 @@ struct GamesPage{
     results: Vec<Game>
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 struct Game {
     id: i32,
     width: i32,
@@ -127,11 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         games_page = page.unwrap();
-        for game in games_page.results {
-            if game.width == 9 {
-                games.push(game);
-            }
-        }
+        games.append(&mut games_page.results.iter().copied().filter(|game| game.width == 9).collect());
 
         bar.inc(1);
     }
@@ -142,16 +138,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let mut games_grouped_by_date = Vec::new();
-    for (key, group) in &games.into_iter().group_by(|game| game.ended.date_naive()) {
-        games_grouped_by_date.push((key, group.collect::<Vec<Game>>()));
-    }
+    let games_grouped_by_date : Vec<(NaiveDate, Vec<Game>)> = games
+        .into_iter()
+        .group_by(|game| game.ended.date_naive())
+        .into_iter()
+        .map(|(key, group)| (key, group.collect::<Vec<Game>>()))
+        .collect();
 
-    let mut dates = Vec::new();
-    for t in &games_grouped_by_date {
-        dates.push(t.0.to_string())
-    }
-
+    let mut dates : Vec<String> = games_grouped_by_date
+        .iter()
+        .map(|(d, _v)| d.to_string())
+        .collect();
     dates.sort();
 
     let question = Question::multi_select("dates")
@@ -167,9 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut selected_dates = Vec::new();
     let answer = answer_result.unwrap();
     if let Answer::ListItems(s_dates) = answer {
-        for date in s_dates {
-            selected_dates.push(date.text)
-        }
+        selected_dates = s_dates.into_iter().map(|date| date.text).collect();
     }
 
     if selected_dates.len() == 0 {
@@ -178,7 +173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut games_subset = Vec::new();
-    for (date, games) in &games_grouped_by_date {
+    for (date, games) in games_grouped_by_date {
         if selected_dates.contains(&date.to_string()) {
             for game in games {
                 games_subset.push(game);
@@ -233,8 +228,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (id, sgf) in &sgfs {
         let file_path = dir_path.join(format!("{}.sgf", id));
-        let mut tmp_file = File::create(file_path)?;
-        writeln!(tmp_file, "{}", sgf)?;
+        let mut file = File::create(file_path)?;
+        writeln!(file, "{}", sgf)?;
     }
 
     println!("{} games was downloaded and exported.", sgfs.len());
