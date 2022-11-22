@@ -7,6 +7,7 @@ readme = "README.md"
 repository = "https://github.com/efimovnikita/OgsSgfDownloader/tree/abc250c7399d969a7085507e2ccf34743dfd99f3/ninebynine"
 keywords = ["go", "baduk", "weiqi"]
 categories = ["command-line-utilities", "games"]
+license = "MIT OR Apache-2.0"
 
 exclude = [
     ".idea/*",
