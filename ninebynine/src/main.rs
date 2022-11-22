@@ -5,21 +5,22 @@ use serde::{Serialize, Deserialize};
 use requestty::{Question, Answer};
 use std::{fs};
 use std::path::{PathBuf};
-use spinners::{Spinner, Spinners};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use std::time::Duration;
 use async_std::task;
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::Rng;
+use std::string::String;
 
+/// Tool for download 9x9 SGF files from OGS
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Player name at OGS
     #[arg(short, long)]
     name: String,
-    /// Path to folder
+    /// Path to save folder
     #[arg(short, long)]
     path: PathBuf
 }
@@ -97,61 +98,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .json()
         .await?;
 
-    for game in games_page.results {
-        if game.width == 9 {
-            games.push(game);
-        }
-    }
-
-    // let mut sp = Spinner::new(Spinners::Line, "Downloading games...".to_string());
-
-    let rounded_count = (games_page.count as f64 / 10_f64).ceil() as u64;
-    let bar = ProgressBar::new(rounded_count);
+    let pages_count = (games_page.count as f64 / 10_f64).ceil() as u64;
+    let bar = ProgressBar::new(pages_count);
     bar.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
         .unwrap()
         .progress_chars("##-"));
-    bar.inc(1);
-    loop {
-        match games_page.next {
-            None => break,
-            Some(ref url) => {
-                let split_url = url.split("=").collect::<Vec<&str>>();
-                bar.set_message(format!("Download page #{}", split_url.get(1).unwrap()));
-                // bar.set_message(format!("Download {}", url));
-                let secs = rand::thread_rng().gen_range(30..60);
-                let duration = Duration::from_secs(secs);
+    for page_number in 0..pages_count as i32 {
+        let secs = rand::thread_rng().gen_range(5..10);
+        let duration = Duration::from_secs(secs);
 
-                let response = reqwest::get(url).await;
-                if response.is_err() {
-                    bar.set_message(format!("Response error. Wait {} seconds...", secs));
-                    task::sleep(duration).await;
-                    continue
-                }
+        let url = String::from(format!("https://online-go.com/api/v1/players{}/games?page={}", selected_id, page_number + 1));
+        bar.set_message(format!("Download {}", url));
 
-                let page = response.unwrap().json::<GamesPage>().await;
-                if page.is_err() {
-                    bar.set_message(format!("Deserialization error. Wait {} seconds...", secs));
-                    task::sleep(duration).await;
-                    continue
-                }
+        let response = reqwest::get(url).await;
+        if response.is_err() {
+            bar.set_message("Response error. Skip page...");
+            task::sleep(duration).await;
+            bar.inc(1);
+            continue
+        }
 
-                games_page = page.unwrap();
-                bar.inc(1);
+        let page = response.unwrap().json::<GamesPage>().await;
+        if page.is_err() {
+            bar.set_message("Deserialization error. Skip page...");
+            task::sleep(duration).await;
+            bar.inc(1);
+            continue
+        }
 
-                for game in games_page.results {
-                    if game.width == 9 {
-                        games.push(game);
-                    }
-                }
+        games_page = page.unwrap();
+        for game in games_page.results {
+            if game.width == 9 {
+                games.push(game);
             }
         }
+
+        bar.inc(1);
     }
     bar.finish();
 
-    // sp.stop();
-
     if games.len() == 0 {
-        println!("\n9x9 games not found.");
+        println!("9x9 games not found.");
         return Ok(());
     }
 
@@ -199,33 +186,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let mut sp2 = Spinner::new(Spinners::Line, "Export sgf files...".to_string());
+    let bar2 = ProgressBar::new((*&games_subset.len()).try_into().unwrap());
+    bar2.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
+        .unwrap()
+        .progress_chars("##-"));
 
     let mut sgfs = Vec::new();
-
     for game in &games_subset {
-        let sgf_response = reqwest::get(format!("https://online-go.com/api/v1/games/{}/sgf", game.id)).await;
-        if sgf_response.is_err() { continue }
+        let url = format!("https://online-go.com/api/v1/games/{}/sgf", game.id);
+        bar2.set_message(format!("Export SGF from {}", url));
+
+        let sgf_response = reqwest::get(url).await;
+        if sgf_response.is_err() {
+            bar2.inc(1);
+            continue
+        }
 
         let sgf_result = sgf_response.unwrap().text().await;
-        if sgf_result.is_err() { continue }
+        if sgf_result.is_err() {
+            bar2.inc(1);
+            continue
+        }
 
         let sgf = sgf_result.unwrap();
         sgfs.push((game.id, sgf));
+
+        bar2.inc(1);
     }
+
+    bar2.finish();
 
     let dir_path = args.path.join(selected_username);
     if dir_path.exists() {
         let remove_result = fs::remove_dir_all(&dir_path);
         if remove_result.is_err() {
-            println!("\nError during removing directory {}", dir_path.display());
+            println!("Error during removing directory {}", dir_path.display());
             return Ok(());
         }
     }
 
     let create_result = fs::create_dir(&dir_path);
     if create_result.is_err() {
-        println!("\nError during creating new directory {}", dir_path.display());
+        println!("Error during creating new directory {}", dir_path.display());
         return Ok(());
     }
 
@@ -235,9 +237,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         writeln!(tmp_file, "{}", sgf)?;
     }
 
-    sp2.stop();
-
-    println!("\n");
     println!("{} games was downloaded and exported.", sgfs.len());
 
     println!("Done!");
