@@ -1,6 +1,6 @@
 mod structs;
 
-use structs::{ Args, Query, GamesPage, Game, Player, IsNineByNine };
+use structs::{ Args, Query, GamesPage, Game, Player };
 use std::fs::File;
 use std::io::{ Write };
 use clap::Parser;
@@ -8,12 +8,12 @@ use requestty::{ Question, Answer };
 use std::{ fs };
 use std::path::PathBuf;
 use chrono::NaiveDate;
-use itertools::Itertools;
 use std::time::Duration;
 use async_std::task;
 use indicatif::{ ProgressBar, ProgressStyle };
 use rand::Rng;
 use std::string::String;
+use crate::structs::{GetGamesGroupedByDate, GetNineByNineGames, GetSortedDatesFromGroupedGames};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -52,29 +52,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let url = String::from(format!("https://online-go.com/api/v1/players{}/games?page={}", selected_id, page_number + 1));
         bar.set_message(format!("Download {}", url));
 
-        let response = reqwest::get(url).await;
-        if response.is_err() {
+        let response_result = reqwest::get(url).await;
+        if response_result.is_err() {
             bar.set_message("Response error. Skip page...");
             task::sleep(duration).await;
             bar.inc(1);
             continue
         }
 
-        let page = response.unwrap().json::<GamesPage>().await;
-        if page.is_err() {
+        let page_result = response_result.unwrap().json::<GamesPage>().await;
+        if page_result.is_err() {
             bar.set_message("Deserialization error. Skip page...");
             task::sleep(duration).await;
             bar.inc(1);
             continue
         }
 
-        games_page = page.unwrap();
-        games.append(&mut games_page
-            .results
-            .iter()
-            .copied()
-            .filter(|game| game.is_nine_by_nine())
-            .collect());
+        games_page = page_result.unwrap();
+        games.append(&mut games_page.get_nine_by_nine_games());
 
         bar.inc(1);
     }
@@ -85,22 +80,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let games_grouped_by_date : Vec<(NaiveDate, Vec<Game>)> = games
-        .into_iter()
-        .group_by(|game| game.ended.date_naive())
-        .into_iter()
-        .map(|(key, group)| (key, group.collect::<Vec<Game>>()))
-        .collect();
-
-    let mut dates : Vec<String> = games_grouped_by_date
-        .iter()
-        .map(|(d, _v)| d.to_string())
-        .collect();
-    dates.sort();
+    let games_grouped_by_date : Vec<(NaiveDate, Vec<&Game>)> = games.get_games_grouped_by_date();
+    let sorted_dates: Vec<String> = games_grouped_by_date.get_sorted_dates_from_grouped_games();
 
     let question = Question::multi_select("dates")
         .message("Select dates")
-        .choices(dates)
+        .choices(sorted_dates)
         .build();
     let answer_result = requestty::prompt_one(question);
     if answer_result.is_err() {
