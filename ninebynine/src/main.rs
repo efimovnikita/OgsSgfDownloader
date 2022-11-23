@@ -1,11 +1,12 @@
 mod structs;
 
-use structs::{ Args, Query, GamesPage, Game };
+use structs::{ Args, Query, GamesPage, Game, Player };
 use std::fs::File;
 use std::io::{ Write };
 use clap::Parser;
 use requestty::{ Question, Answer };
 use std::{ fs };
+use std::path::PathBuf;
 use chrono::NaiveDate;
 use itertools::Itertools;
 use std::time::Duration;
@@ -30,28 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let players = search_player_response.players;
 
-    let mut selected_id: i32 = 0;
-    let mut selected_username: String = String::new();
-    if players.len() == 1 {
-        selected_id = players[0].clone().id;
-        selected_username = players[0].clone().username;
-    }else{
-        let names: Vec<String> = players.to_vec().into_iter().map(|p| p.username).collect();
-        let question = Question::select("size")
-            .message("Select player name")
-            .choices(names)
-            .build();
-        let answer = requestty::prompt_one(question)?;
-
-        if let Answer::ListItem(item) = answer {
-            for player in players {
-                if player.username == item.text {
-                    selected_id = player.id;
-                    selected_username = player.username;
-                }
-            }
-        }
-    }
+    let (selected_id, selected_username) = get_player_id_and_username(players);
 
     let mut games: Vec<Game> = Vec::new();
 
@@ -170,7 +150,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         bar2.inc(1);
     }
-
     bar2.finish();
 
     let dir_path = args.path.join(selected_username);
@@ -188,15 +167,57 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    for (id, sgf) in &sgfs {
-        let file_path = dir_path.join(format!("{}.sgf", id));
-        let mut file = File::create(file_path)?;
-        writeln!(file, "{}", sgf)?;
-    }
+    create_sgf_files(&mut sgfs, dir_path);
 
     println!("{} games was downloaded and exported.", sgfs.len());
 
     println!("Done!");
 
     Ok(())
+}
+
+fn create_sgf_files(sgfs: &mut Vec<(i32, String)>, dir_path: PathBuf) {
+    for (id, sgf) in sgfs {
+        let file_path = dir_path.join(format!("{}.sgf", id));
+        let create_file_result = File::create(&file_path);
+        match create_file_result {
+            Ok(mut file) => {
+                let write_to_file_result = writeln!(file, "{}", sgf);
+                if write_to_file_result.is_err() {
+                    println!("Error when write file content: {}", file_path.display());
+                    continue
+                }
+            }
+            Err(_) => {
+                println!("Error create a file: {}", file_path.display());
+                continue
+            }
+        }
+    }
+}
+
+fn get_player_id_and_username(players: Vec<Player>) -> (i32, String) {
+    let mut selected_id: i32 = 0;
+    let mut selected_username: String = String::new();
+    if players.len() == 1 {
+        selected_id = players[0].clone().id;
+        selected_username = players[0].clone().username;
+    } else {
+        let names: Vec<String> = players.to_vec().into_iter().map(|p| p.username).collect();
+        let question = Question::select("size")
+            .message("Select player name")
+            .choices(names)
+            .build();
+        let answer = requestty::prompt_one(question).unwrap();
+
+        if let Answer::ListItem(item) = answer {
+            for player in players {
+                if player.username == item.text {
+                    selected_id = player.id;
+                    selected_username = player.username;
+                }
+            }
+        }
+    }
+    (selected_id, selected_username)
 }
