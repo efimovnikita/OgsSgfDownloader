@@ -1,56 +1,18 @@
+mod structs;
+
+use structs::{ Args, Query, GamesPage, Game };
 use std::fs::File;
-use std::io::{ Write};
+use std::io::{ Write };
 use clap::Parser;
-use serde::{Serialize, Deserialize};
-use requestty::{Question, Answer};
-use std::{fs};
-use std::path::{PathBuf};
-use chrono::{DateTime, NaiveDate, Utc};
+use requestty::{ Question, Answer };
+use std::{ fs };
+use chrono::NaiveDate;
 use itertools::Itertools;
 use std::time::Duration;
 use async_std::task;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{ ProgressBar, ProgressStyle };
 use rand::Rng;
 use std::string::String;
-
-/// Tool for download 9x9 SGF files from OGS
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// Player name at OGS
-    #[arg(short, long)]
-    name: String,
-    /// Path to save folder
-    #[arg(short, long)]
-    path: PathBuf
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct Player {
-    id: i32,
-    username: String
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Query {
-    q: String,
-    players: Vec<Player>
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct GamesPage{
-    count: f32,
-    next: Option<String>,
-    previous: Option<String>,
-    results: Vec<Game>
-}
-
-#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
-struct Game {
-    id: i32,
-    width: i32,
-    ended: DateTime<Utc>
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
