@@ -1,5 +1,5 @@
 # Ninebynine
-Tool for download 9x9 games (sgf-files) from [OGS](https://online-go.com).
+Tool for download 9x9 go games (sgf-files) from [OGS](https://online-go.com).
 
 <ins>Usage:</ins> ```ninebynine --name <NAME> --path <PATH> ```
 
