@@ -1,6 +1,6 @@
 mod structs;
 
-use structs::{ Args, Query, GamesPage, Game, Player };
+use structs::{ Args, Query, GamesPage, Game, Player, IsNineByNine };
 use std::fs::File;
 use std::io::{ Write };
 use clap::Parser;
@@ -69,7 +69,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         games_page = page.unwrap();
-        games.append(&mut games_page.results.iter().copied().filter(|game| game.width == 9).collect());
+        games.append(&mut games_page
+            .results
+            .iter()
+            .copied()
+            .filter(|game| game.is_nine_by_nine())
+            .collect());
 
         bar.inc(1);
     }

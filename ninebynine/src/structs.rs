@@ -38,6 +38,16 @@ pub struct GamesPage{
 #[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub struct Game {
     pub id: i32,
-    pub width: i32,
+    width: i32,
     pub ended: DateTime<Utc>
+}
+
+pub trait IsNineByNine {
+    fn is_nine_by_nine(&self) -> bool;
+}
+
+impl IsNineByNine for Game {
+    fn is_nine_by_nine(&self) -> bool {
+        self.width == 9
+    }
 }
