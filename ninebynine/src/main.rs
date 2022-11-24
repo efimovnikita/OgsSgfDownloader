@@ -33,14 +33,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (selected_id, selected_username) = get_player_id_and_username(players);
 
-    let mut games: Vec<Game> = Vec::new();
-
     let mut games_page: GamesPage = reqwest::get(format!("https://online-go.com/api/v1/players{}/games?page=1", selected_id))
         .await?
         .json()
         .await?;
 
     let pages_count = (games_page.count as f64 / 10_f64).ceil() as u64;
+
+    let mut games: Vec<Game> = Vec::with_capacity(games_page.count as usize);
+
     let bar = ProgressBar::new(pages_count);
     bar.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
         .unwrap()
@@ -85,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let question = Question::multi_select("dates")
         .message("Select dates")
-        .choices(sorted_dates)
+        .choices(&sorted_dates)
         .build();
     let answer_result = requestty::prompt_one(question);
     if answer_result.is_err() {
@@ -93,7 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let mut selected_dates = Vec::new();
+    let mut selected_dates = Vec::with_capacity(sorted_dates.len());
     let answer = answer_result.unwrap();
     if let Answer::ListItems(s_dates) = answer {
         selected_dates = s_dates.into_iter().map(|date| date.text).collect();
@@ -104,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let mut games_subset = Vec::new();
+    let mut games_subset = Vec::with_capacity(games_page.count as usize);
     for (date, games) in games_grouped_by_date {
         if selected_dates.contains(&date.to_string()) {
             for game in games {
@@ -118,7 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap()
         .progress_chars("##-"));
 
-    let mut sgfs = Vec::new();
+    let mut sgfs = Vec::with_capacity(games_subset.len());
     for game in &games_subset {
         bar2.set_message(format!("Export SGF for game with id \'{}\'", game.id));
 
