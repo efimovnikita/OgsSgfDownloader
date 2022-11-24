@@ -13,7 +13,7 @@ use async_std::task;
 use indicatif::{ ProgressBar, ProgressStyle };
 use rand::Rng;
 use std::string::String;
-use crate::structs::{GetGamesGroupedByDate, GetNineByNineGames, GetSortedDatesFromGroupedGames};
+use crate::structs::{GetGamesGroupedByDate, GetNineByNineGames, GetSgf, GetSortedDatesFromGroupedGames};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -120,24 +120,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut sgfs = Vec::new();
     for game in &games_subset {
-        let url = format!("https://online-go.com/api/v1/games/{}/sgf", game.id);
-        bar2.set_message(format!("Export SGF from {}", url));
+        bar2.set_message(format!("Export SGF for game with id \'{}\'", game.id));
 
-        let sgf_response = reqwest::get(url).await;
-        if sgf_response.is_err() {
+        let sgf = game.get_sgf().await;
+        if sgf.is_none() {
             bar2.inc(1);
             continue
         }
 
-        let sgf_result = sgf_response.unwrap().text().await;
-        if sgf_result.is_err() {
-            bar2.inc(1);
-            continue
-        }
-
-        let sgf = sgf_result.unwrap();
-        sgfs.push((game.id, sgf));
-
+        sgfs.push((game.id, sgf.unwrap()));
         bar2.inc(1);
     }
     bar2.finish();

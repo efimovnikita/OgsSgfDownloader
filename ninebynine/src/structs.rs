@@ -3,6 +3,7 @@ use serde::{Serialize, Deserialize};
 use std::path::{PathBuf};
 use chrono::{DateTime, Utc, NaiveDate};
 use itertools::Itertools;
+use async_trait::async_trait;
 
 /// Tool for download 9x9 SGF files from OGS
 #[derive(Parser, Debug)]
@@ -36,11 +37,12 @@ pub struct GamesPage{
     pub results: Vec<Game>
 }
 
-#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Game {
     pub id: i32,
     width: i32,
-    pub ended: DateTime<Utc>
+    pub ended: DateTime<Utc>,
+    pub name: String
 }
 
 pub trait GetNineByNineGames {
@@ -52,9 +54,33 @@ impl GetNineByNineGames for GamesPage {
         self
             .results
             .iter()
-            .copied()
+            .cloned()
             .filter(|game| game.is_nine_by_nine())
             .collect()
+    }
+}
+
+#[async_trait]
+pub trait GetSgf {
+    async fn get_sgf(&self) -> Option<String>;
+}
+
+#[async_trait]
+impl GetSgf for Game {
+    async fn get_sgf(&self) -> Option<String> {
+        let url = format!("https://online-go.com/api/v1/games/{}/sgf", self.id);
+        let sgf_response = reqwest::get(url).await;
+        if sgf_response.is_err() {
+            return None;
+        }
+
+        let sgf_result = sgf_response.unwrap().text().await;
+        if sgf_result.is_err() {
+            return None;
+        }
+
+        let sgf = sgf_result.unwrap();
+        Some(sgf)
     }
 }
 

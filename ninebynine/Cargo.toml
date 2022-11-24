@@ -1,6 +1,6 @@
 [package]
 name = "ninebynine"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2021"
 description = "Tool for download 9x9 SGF files from OGS server."
 readme = "README.md"
@@ -26,3 +26,4 @@ itertools = "0.10.5"
 async-std = "1.12.0"
 indicatif = "0.17.2"
 rand = "0.8.5"
+async-trait = "0.1.58"
