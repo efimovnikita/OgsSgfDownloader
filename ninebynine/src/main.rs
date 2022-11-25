@@ -1,19 +1,21 @@
 mod structs;
 
-use structs::{ Args, Query, GamesPage, Game, Player };
-use std::fs::File;
-use std::io::{ Write };
-use clap::Parser;
-use requestty::{ Question, Answer };
-use std::{ fs };
-use std::path::PathBuf;
-use chrono::NaiveDate;
-use std::time::Duration;
+use crate::structs::{
+    GetGamesGroupedByDate, GetNineByNineGames, GetSgf, GetSortedDatesFromGroupedGames,
+};
 use async_std::task;
-use indicatif::{ ProgressBar, ProgressStyle };
+use chrono::NaiveDate;
+use clap::Parser;
+use indicatif::{ProgressBar, ProgressStyle};
 use rand::Rng;
+use requestty::{Answer, Question};
+use std::fs;
+use std::fs::File;
+use std::io::Write;
+use std::path::PathBuf;
 use std::string::String;
-use crate::structs::{GetGamesGroupedByDate, GetNineByNineGames, GetSgf, GetSortedDatesFromGroupedGames};
+use std::time::Duration;
+use structs::{Args, Game, GamesPage, Player, Query};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -24,24 +26,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let search_player_response: Query = reqwest::get(format!("https://online-go.com/api/v1/ui/omniSearch?q={}", args.name))
-        .await?
-        .json()
-        .await?;
+    let search_player_result = reqwest::get(format!(
+        "https://online-go.com/api/v1/ui/omniSearch?q={}",
+        args.name
+    ))
+    .await;
+    if search_player_result.is_err() {
+        println!("Error response from OGS. Exit");
+        return Ok(());
+    }
+
+    let query_parsing_result = search_player_result.unwrap().json::<Query>().await;
+    if query_parsing_result.is_err() {
+        println!("Error while parsing player info from OGS. Exit");
+        return Ok(());
+    }
+
+    let search_player_response = query_parsing_result.unwrap();
 
     let players = search_player_response.players;
 
     let (selected_id, selected_username) = get_player_id_and_username(players);
 
-    let games_page_result =
-        reqwest::get(format!("https://online-go.com/api/v1/players{}/games?page=1", selected_id))
-            .await;
+    let games_page_result = reqwest::get(format!(
+        "https://online-go.com/api/v1/players{}/games?page=1",
+        selected_id
+    ))
+    .await;
     if games_page_result.is_err() {
         println!("Error response from OGS. Exit");
         return Ok(());
     }
 
-    let unwrapped_response= games_page_result.unwrap();
+    let unwrapped_response = games_page_result.unwrap();
     let games_page_parse_result = unwrapped_response.json::<GamesPage>().await;
     if games_page_parse_result.is_err() {
         println!("Error while parsing player games page from OGS. Exit");
@@ -55,14 +72,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut games: Vec<Game> = Vec::with_capacity(games_page.count as usize);
 
     let bar = ProgressBar::new(pages_count);
-    bar.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
+    bar.set_style(
+        ProgressStyle::with_template(
+            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        )
         .unwrap()
-        .progress_chars("##-"));
+        .progress_chars("##-"),
+    );
     for page_number in 0..pages_count as i32 {
         let secs = rand::thread_rng().gen_range(5..10);
         let duration = Duration::from_secs(secs);
 
-        let url = String::from(format!("https://online-go.com/api/v1/players{}/games?page={}", selected_id, page_number + 1));
+        let url = String::from(format!(
+            "https://online-go.com/api/v1/players{}/games?page={}",
+            selected_id,
+            page_number + 1
+        ));
         bar.set_message(format!("Download {}", url));
 
         let response_result = reqwest::get(url).await;
@@ -70,7 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             bar.set_message("Response error. Skip page...");
             task::sleep(duration).await;
             bar.inc(1);
-            continue
+            continue;
         }
 
         let page_result = response_result.unwrap().json::<GamesPage>().await;
@@ -78,7 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             bar.set_message("Deserialization error. Skip page...");
             task::sleep(duration).await;
             bar.inc(1);
-            continue
+            continue;
         }
 
         games_page = page_result.unwrap();
@@ -93,7 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let games_grouped_by_date : Vec<(NaiveDate, Vec<&Game>)> = games.get_games_grouped_by_date();
+    let games_grouped_by_date: Vec<(NaiveDate, Vec<&Game>)> = games.get_games_grouped_by_date();
     let sorted_dates: Vec<String> = games_grouped_by_date.get_sorted_dates_from_grouped_games();
 
     let question = Question::multi_select("dates")
@@ -126,25 +151,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let bar2 = ProgressBar::new((*&games_subset.len()).try_into().unwrap());
-    bar2.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
+    let bar = ProgressBar::new((*&games_subset.len()).try_into().unwrap());
+    bar.set_style(
+        ProgressStyle::with_template(
+            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        )
         .unwrap()
-        .progress_chars("##-"));
+        .progress_chars("##-"),
+    );
 
     let mut sgfs = Vec::with_capacity(games_subset.len());
     for game in &games_subset {
-        bar2.set_message(format!("Export SGF for game with id \'{}\'", game.id));
+        bar.set_message(format!("Export SGF for game with id \'{}\'", game.id));
 
         let sgf = game.get_sgf().await;
         if sgf.is_none() {
-            bar2.inc(1);
-            continue
+            bar.inc(1);
+            continue;
         }
 
         sgfs.push((game.id, sgf.unwrap()));
-        bar2.inc(1);
+        bar.inc(1);
     }
-    bar2.finish();
+    bar.finish();
 
     let dir_path = args.path.join(selected_username);
     if dir_path.exists() {
@@ -179,12 +208,12 @@ fn create_sgf_files(sgfs: &mut Vec<(i32, String)>, dir_path: PathBuf) {
                 let write_to_file_result = writeln!(file, "{}", sgf);
                 if write_to_file_result.is_err() {
                     println!("Error when write file content: {}", file_path.display());
-                    continue
+                    continue;
                 }
             }
             Err(_) => {
                 println!("Error create a file: {}", file_path.display());
-                continue
+                continue;
             }
         }
     }
