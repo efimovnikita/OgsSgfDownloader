@@ -33,10 +33,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (selected_id, selected_username) = get_player_id_and_username(players);
 
-    let mut games_page: GamesPage = reqwest::get(format!("https://online-go.com/api/v1/players{}/games?page=1", selected_id))
-        .await?
-        .json()
-        .await?;
+    let games_page_result =
+        reqwest::get(format!("https://online-go.com/api/v1/players{}/games?page=1", selected_id))
+            .await;
+    if games_page_result.is_err() {
+        println!("Error response from OGS. Exit");
+        return Ok(());
+    }
+
+    let unwrapped_response= games_page_result.unwrap();
+    let games_page_parse_result = unwrapped_response.json::<GamesPage>().await;
+    if games_page_parse_result.is_err() {
+        println!("Error while parsing player games page from OGS. Exit");
+        return Ok(());
+    }
+
+    let mut games_page = games_page_parse_result.unwrap();
 
     let pages_count = (games_page.count as f64 / 10_f64).ceil() as u64;
 
